@@ -9,10 +9,12 @@ from rest_framework.decorators import api_view
 from api.models import User, Video, Segment, Analize, Evaluation
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
 from pytube import YouTube
+from youtube_transcript_api import YouTubeTranscriptApi
 
 PATH_SEGMENTS = os.path.dirname(os.path.abspath(__file__)) + '/../data/segments/'
 PATH_IMAGES = os.path.dirname(os.path.abspath(__file__)) + '/../data/images/'
 PATH_VIDEO = os.path.dirname(os.path.abspath(__file__)) + '/../data/'
+PATH_TRANSCRIPTS = os.path.dirname(os.path.abspath(__file__)) + '/../data/transcripts/'
 VIDEO_URL = 'http://127.0.0.1:8000/api/video/'
 IMAGE_URL = 'http://127.0.0.1:8000/api/clip-image/'
 loggedUser = ''
@@ -161,7 +163,8 @@ def user_login(request, email):
 # EXTRACT SUBCLIP VIDEO
 @api_view(['GET'])
 def get_subclip(request, video, endTime):
-    """This method aims to create subclip and thumbnail from original video"""
+    """This method aims to create subclip and thumbnail from original video and
+    generates a json file with the transcripts of the created subclip"""
 
     # FFMPEG
     # https://stackoverflow.com/questions/37317140/cutting-out-a-portion-of-video-python
@@ -178,6 +181,22 @@ def get_subclip(request, video, endTime):
         os.system('ffmpeg -i ' + str(file) + ' -ss ' + str(startTime) +
                   ' -vframes 1 ' + PATH_IMAGES +
                   str(subClipName) + '.jpg')
+
+        file = PATH_TRANSCRIPTS + videoName + '.json'
+        if os.path.isfile(file):
+            listTranscript = []
+            returnTranscript = []
+            data = open(file)
+            transcript = json.load(data)
+            for t in transcript:
+                listTranscript.append(t)
+            for t in listTranscript:
+                endTranscript = t['start'] + t['duration']
+                if endTranscript <= endTime and t['start'] >= startTime:
+                    returnTranscript.append(t)
+            if returnTranscript.__len__():
+                with open(PATH_TRANSCRIPTS + subClipName + ".json", "w") as f:
+                    json.dump(returnTranscript, f)
 
         startTime = endTime
 
@@ -198,6 +217,7 @@ def remove_clip_file(request):
     global subClipName, PATH_SEGMENTS, PATH_IMAGES
     os.remove(PATH_SEGMENTS + subClipName + '.mp4')
     os.remove(PATH_IMAGES + subClipName + '.jpg')
+    os.remove(PATH_TRANSCRIPTS + subClipName + '.json')
 
 
 @api_view(['GET'])
@@ -467,9 +487,9 @@ def finish_segmentation(request):
 
 @api_view(['POST'])
 def add_video(request):
-    """This method aims to add new video by YouTube url"""
+    """This method aims to add new video by YouTube url and extract json file with all subtitles"""
 
-    global PATH_VIDEO
+    global PATH_VIDEO, PATH_TRANSCRIPTS
     body_unicode = request.body.decode('utf-8')
     body = json.loads(body_unicode)
     url = body['url']
@@ -484,17 +504,19 @@ def add_video(request):
             'response': 'added'
         }
     }
-    return JsonResponse(responseData)
+
+    myUrl = url.split('=')
+    transcript = YouTubeTranscriptApi.get_transcript(myUrl[1], languages=['en'])
+    with open(PATH_TRANSCRIPTS + fileName + ".json", "w") as f:
+        json.dump(transcript, f)
 
     # prova video
-    # https://www.youtube.com/watch?v=MyjBKCSTQOk
+    # http://youtube.com/watch?v=2lAe1cqCOXo
 
-    yt = YouTube(url)
-    # print(yt.captions.get('en-US').xml_captions)
-    print(yt.captions)
-    # en_caption_data = yt.captions['a.en']
-    # srt_format = en_caption_data.xml_caption_to_srt(en_caption_data.xml_captions)
-    # print(srt_format)
+    # source
+    # https://www.geeksforgeeks.org/python-downloading-captions-from-youtube/
+
+    return JsonResponse(responseData)
 
 
 @api_view(['POST'])
@@ -515,7 +537,7 @@ def split_with_json(request):
         if endTime > temporaryStartTime:
             subClipName = 'clip-' + str(videoName) + str(segment['start-time']) + '-' + str(endTime)
             ffmpeg_extract_subclip(file, startTime, endTime, targetname=PATH_SEGMENTS + subClipName + '.mp4')
-            os.system('ffmpeg -i ' + str(file) + ' -ss ' + str(startTime) +' -vframes 1 ' + PATH_IMAGES +
+            os.system('ffmpeg -i ' + str(file) + ' -ss ' + str(startTime) + ' -vframes 1 ' + PATH_IMAGES +
                       str(subClipName) + '.jpg')
             startTime = endTime
 
@@ -556,3 +578,4 @@ def get_evaluation(request):
         }
     }
     return JsonResponse(responseData)
+

@@ -36,3 +36,4 @@ typing_extensions==4.3.0
 urllib3==1.26.12
 virtualenv==20.16.3
 wrapt==1.14.1
+youtube-transcript-api==0.4.4
