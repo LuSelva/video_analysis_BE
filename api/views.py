@@ -539,6 +539,21 @@ def split_with_json(request):
             ffmpeg_extract_subclip(file, startTime, endTime, targetname=PATH_SEGMENTS + subClipName + '.mp4')
             os.system('ffmpeg -i ' + str(file) + ' -ss ' + str(startTime) + ' -vframes 1 ' + PATH_IMAGES +
                       str(subClipName) + '.jpg')
+            file = PATH_TRANSCRIPTS + videoName + '.json'
+            if os.path.isfile(file):
+                listTranscript = []
+                returnTranscript = []
+                data = open(file)
+                transcript = json.load(data)
+                for t in transcript:
+                    listTranscript.append(t)
+                for t in listTranscript:
+                    endTranscript = t['start'] + t['duration']
+                    if endTranscript <= endTime and t['start'] >= startTime:
+                        returnTranscript.append(t)
+                if returnTranscript.__len__():
+                    with open(PATH_TRANSCRIPTS + subClipName + ".json", "w") as f:
+                        json.dump(returnTranscript, f)
             startTime = endTime
 
         user = User.objects.get(email=loggedUser)
